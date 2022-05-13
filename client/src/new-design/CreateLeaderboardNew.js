@@ -19,8 +19,6 @@ const CreateLeaderboardNew = () => {
   const [testName, setTestName] = useState();
   const [isClicked, setIsClicked] = useState(false);
 
-  const [biconomyReady, setBiconomyReady] = useState(false);
-
   const inputRef = useRef();
 
   useEffect(() => {
@@ -37,27 +35,12 @@ const CreateLeaderboardNew = () => {
     functionSignature,
     contractAddress
   ) => {
-    let abi = require("ethereumjs-abi"); //dependencies
+    let abi = require("ethereumjs-abi");
 
     return abi.soliditySHA3(
       ["uint256", "address", "uint256", "bytes"],
       [nonce, contractAddress, chainId, toBuffer(functionSignature)]
     );
-
-    // return web3.utils.soliditySha3(
-    //   nonce, contractAddress, chainId, toBuffer(functionSignature)
-    // );
-
-    // console.log("FUNCTION SIGNATURE: " + functionSignature);
-    // return web3.eth.abi.encodeParameters(
-    //   ["uint256", "address", "uint256", "bytes"], 
-    //   [nonce, contractAddress, chainId, toBuffer(functionSignature)]
-    // );
-    // let abi = require("ethereumjs-abi"); //dependencies
-    // return abi.soliditySHA3(
-    //   ["uint256", "address", "uint256", "bytes"],
-    //   [nonce, contractAddress, chainId, Buffer.from(functionSignature, 'utf8')]
-    // );
   }
 
   const getSignatureParameters = (signature) => {
@@ -80,18 +63,13 @@ const CreateLeaderboardNew = () => {
 
   const handleClick = async () => {
 
-    const provider = new Web3.providers.HttpProvider("https://polygon-mainnet.g.alchemy.com/v2/cD4nWvE0TdHTcHso_kppK2Hh9PnukLzZ");
-    const newWeb3 = new Web3(provider);
-
-    console.log(newWeb3);
-
-    const biconomy = new Biconomy(newWeb3.currentProvider, {apiKey: "yyWjacp44.cb47adbb-4d70-496f-a9b2-b0caa7602f75"});
+    const biconomy = new Biconomy(web3.currentProvider, { apiKey: "yyWjacp44.cb47adbb-4d70-496f-a9b2-b0caa7602f75", debug: true });
     let biconomyWeb3 = new Web3(biconomy);
+
     console.log(biconomyWeb3.currentProvider);
 
     biconomy.onEvent(biconomy.READY, async () => {
       // Initialize your dapp here like getting user accounts etc
-      setBiconomyReady(true);
 
       const deployedNetwork = CommunityLeaderboard.networks[137];
       let biconomyContract = new biconomyWeb3.eth.Contract(
@@ -100,27 +78,11 @@ const CreateLeaderboardNew = () => {
       );
       biconomyContract.options.address = "0xe21e026ff9b4ad82e10ea25d248ecc5a647925ad";
 
-      const newAccounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const newAccount = newAccounts[0];
-      console.log(newAccount);
-      console.log(web3.utils.isAddress(newAccount));
-
-      console.log("BICONOMY READY:");
-      console.log(biconomyReady);
-
-      let myAccounts = require('web3-eth-accounts');
-      let myAccount1 = await biconomyWeb3.eth.accounts.create(["random account"]);
-      console.log(myAccount1);
-
-      let gasPrice = await web3.eth.getGasPrice();
-      let gasPriceInteger = parseInt(gasPrice, 10);
-      let gasPriceFastInteger = Math.ceil(gasPriceInteger * 0.2 + gasPriceInteger);
-
-      let functionSignature = contract.methods
+      let functionSignature = biconomyContract.methods
         .createLeaderboard(projectId, leaderboardName, epoch)
         .encodeABI();
 
-      let nonce = await web3.eth.getTransactionCount(newAccount);
+      let nonce = await contract.methods.getNonce(window.ethereum.selectedAddress).call();
 
       let messageToSign = constructMetaTransactionMessage(
         nonce,
@@ -131,70 +93,51 @@ const CreateLeaderboardNew = () => {
 
       console.log(messageToSign);
 
-      const signature = await web3.eth.sign(
+      const signature = await web3.eth.personal.sign(
         "0x" + messageToSign.toString("hex"), 
-        newAccount
+        window.ethereum.selectedAddress
       );
 
       console.log("0x" + messageToSign.toString("hex"));
 
       let { r, s, v } = getSignatureParameters(signature);
 
-      let executeMetaTransactionData = contract.methods
-        .executeMetaTransaction(newAccount, functionSignature, r, s, v)
+      let executeMetaTransactionData = biconomyContract.methods
+        .executeMetaTransaction(window.ethereum.selectedAddress, functionSignature, r, s, v)
         .encodeABI();
 
+      let gasPrice = await web3.eth.getGasPrice();
+      let gasPriceInteger = parseInt(gasPrice, 10);
+      let gasPriceFastInteger = Math.ceil(gasPriceInteger * 0.2 + gasPriceInteger);
+
       let txParams = {
-        from: newAccount,
+        from: window.ethereum.selectedAddress,
         to: "0xe21e026ff9b4ad82e10ea25d248ecc5a647925ad",
         value: "0x0",
-        gas: "200000",
-        gasLimit: 3141592,
+        // gas: "200000",
+        // gasLimit: 3141592,
         data: executeMetaTransactionData,
       };
 
-      // const signedTx = await window.ethereum.request({
-      //   method: 'eth_signTypedData',
-      //   params: [txParams],
-      // });
-
-      // const signedTx = await biconomyWeb3.eth.accounts.signTransaction(
-      //   txParams,
-      //   myAccount1.privateKey
-      // );
-
-      // console.log(signedTx);
-
-      sendTransaction(newAccount, functionSignature, r, s, v);
-
-      // let tx = biconomyContract.methods.executeMetaTransaction(
-      //   myAccount1.address, 
-      //   functionSignature, r, s, v
-      // )
-      // .send({from: myAccount1.address /* , gas: 200000, gasLimit: 3141592, gasPrice: gasPriceFastInteger*/ });
+      let tx = biconomyContract.methods.executeMetaTransaction(
+        window.ethereum.selectedAddress, 
+        functionSignature, r, s, v
+      )
+      .send({from: window.ethereum.selectedAddress /*, gas: 200000, gasLimit: 3141592, gasPrice: gasPriceFastInteger */ });
   
-      // tx.on("transactionHash", (hash)=>{
-      //   // Handle transaction hash
-      // }).once("confirmation", (confirmation, recipet) => {
-      //   // Handle confirmation
-      // }).on("error", error => {
-      //   // Handle error
-      //   console.log(error);
-      // });
-
-      // let receipt = await biconomyWeb3.eth
-      //   .sendSignedTransaction(signedTx.rawTransaction)
-      //   .on("transactionHash", (hash) => {
-      //     console.log('hash:',hash);
-      //   })
-      //   .once("confirmation", (confirmation, receipt) => {
-      //   })
-      //   .on("error", (error) => {
-      //     console.log("err:", error);
-      // });
+      tx.on("transactionHash", (hash)=>{
+        // Handle transaction hash
+      }).once("confirmation", (confirmation, recipet) => {
+        // Handle confirmation
+      }).on("error", error => {
+        // Handle error
+        console.log(error.message);
+      });
 
     }).onEvent(biconomy.ERROR, (error, message) => {
       // Handle error while initializing mexa
+      console.log(error);
+      console.log(message);
     });
 
 
@@ -205,42 +148,6 @@ const CreateLeaderboardNew = () => {
     // await contract.methods.createLeaderboard(projectId, leaderboardName, epoch).send({ from: accounts[0], gasPrice: gasPriceFastInteger });
     setIsClicked(true);
   }
-
-  const sendTransaction = async (userAddress, functionData, r, s, v) => {
-    if (web3 && contract) {
-        try {
-            fetch(`https://api.biconomy.io/api/v2/meta-tx/native`, {
-                method: "POST",
-                headers: {
-                  "x-api-key" : "yyWjacp44.cb47adbb-4d70-496f-a9b2-b0caa7602f75",
-                  'Content-Type': 'application/json;charset=utf-8'
-                },
-                body: JSON.stringify({
-                  "to": "0xe21e026ff9b4ad82e10ea25d248ecc5a647925ad",
-                  "apiId": "34d517e6-5bc0-4db7-b103-022034d0b383",
-                  "params": [userAddress, functionData, r, s, v],
-                  "from": userAddress,
-                  "gasLimit": "0xF4240"
-                })
-              })
-              .then(response=>response.json())
-              .then(async function(result) {
-                console.log(result);
-                // showInfoMessage(`Transaction sent by relayer with hash ${result.txHash}`);
-      
-                // let receipt = await getTransactionReceiptMined(result.txHash, 2000);
-                // setTransactionHash(result.txHash);
-                // showSuccessMessage("Transaction confirmed on chain");
-                // getQuoteFromNetwork();
-              }).catch(function(error) {
-                  console.log(error)
-                });
-        } catch (error) {
-            console.log(error);
-        }
-    }
-};
-
 
   return ( 
     <Flex flexDir="column" mt="20vh" ml="6vw" mb={10} w={500}>

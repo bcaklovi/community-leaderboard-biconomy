@@ -4,38 +4,38 @@ const getWeb3 = () =>
   new Promise((resolve, reject) => {
     // Wait for loading completion to avoid race conditions with web3 injection timing.
     window.addEventListener("load", async () => {
-      const provider = new Web3.providers.HttpProvider("https://polygon-mainnet.g.alchemy.com/v2/cD4nWvE0TdHTcHso_kppK2Hh9PnukLzZ");
-      const web3 = new Web3(provider);
-      resolve(web3);
+      // const provider = new Web3.providers.HttpProvider("https://floral-polished-flower.matic.quiknode.pro/a6acd38622de9dd3f1ebdd8144a2f1f157ab1285/");
+      // const web3 = new Web3(provider);
+      // resolve(web3);
 
       // Modern dapp browsers...
-      // if (window.ethereum) {
-      //   const web3 = new Web3(window.ethereum);
-      //   try {
-      //     // Request account access if needed
-      //     await window.ethereum.enable();
-      //     // Accounts now exposed
-      //     resolve(web3);
-      //   } catch (error) {
-      //     reject(error);
-      //   }
-      // }
-      // // Legacy dapp browsers...
-      // else if (window.web3) {
-      //   // Use Mist/MetaMask's provider.
-      //   const web3 = window.web3;
-      //   console.log("Injected web3 detected.");
-      //   resolve(web3);
-      // }
-      // // Fallback to localhost; use dev console port by default...
-      // else {
-      //   const provider = new Web3.providers.HttpProvider(
-      //     "https://polygon-mainnet.g.alchemy.com/v2/cD4nWvE0TdHTcHso_kppK2Hh9PnukLzZ"
-      //   );
-      //   const web3 = new Web3(provider);
-      //   console.log("No web3 instance injected, using Local web3.");
-      //   resolve(web3);
-      // }
+      if (window.ethereum) {
+        const web3 = new Web3(window.ethereum);
+        try {
+          // Request account access if needed
+          await window.ethereum.enable();
+          // Accounts now exposed
+          resolve(web3);
+        } catch (error) {
+          reject(error);
+        }
+      }
+      // Legacy dapp browsers...
+      else if (window.web3) {
+        // Use Mist/MetaMask's provider.
+        const web3 = window.web3;
+        console.log("Injected web3 detected.");
+        resolve(web3);
+      }
+      // Fallback to localhost; use dev console port by default...
+      else {
+        const provider = new Web3.providers.HttpProvider(
+          "https://polygon-mainnet.g.alchemy.com/v2/cD4nWvE0TdHTcHso_kppK2Hh9PnukLzZ"
+        );
+        const web3 = new Web3(provider);
+        console.log("No web3 instance injected, using Local web3.");
+        resolve(web3);
+      }
     });
   });
 
