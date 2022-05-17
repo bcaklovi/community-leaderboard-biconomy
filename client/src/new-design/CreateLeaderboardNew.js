@@ -1,16 +1,26 @@
 import React, { useContext, useState, useEffect, useRef } from "react";
 import { Web3Context } from "../Web3Context";
 import { Biconomy } from "@biconomy/mexa";
-import Web3 from "web3";
 import CommunityLeaderboard from "../contracts/CommunityLeaderboard.json";
-import { toBuffer } from "ethereumjs-util";
+import { constructMetaTransactionMessage, getSignatureParameters } from "../util";
 
-
-import { Input, Button, Flex, Heading, Text } from "@chakra-ui/react";
+import { Input, 
+  Button, 
+  Flex, 
+  Heading, 
+  Text,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton, 
+  useDisclosure } from "@chakra-ui/react";
 
 const CreateLeaderboardNew = () => {
 
-  const { web3, accounts, contract } = useContext(Web3Context);
+  const { web3, accounts, contract, biconomyWeb3, biconomyContract } = useContext(Web3Context);
 
   const [leaderboardName, setLeaderboardName] = useState();
   const [projectId, setProjectId] = useState();
@@ -18,8 +28,11 @@ const CreateLeaderboardNew = () => {
 
   const [testName, setTestName] = useState();
   const [isClicked, setIsClicked] = useState(false);
+  const [modalText, setModalText] = useState("");
 
   const inputRef = useRef();
+
+  const { isOpen, onOpen, onClose } = useDisclosure();
 
   useEffect(() => {
     const getInitialData = async () => {
@@ -29,117 +42,67 @@ const CreateLeaderboardNew = () => {
     getInitialData();
   }, [isClicked]);
 
-  const constructMetaTransactionMessage = (
-    nonce,
-    chainId,
-    functionSignature,
-    contractAddress
-  ) => {
-    let abi = require("ethereumjs-abi");
-
-    return abi.soliditySHA3(
-      ["uint256", "address", "uint256", "bytes"],
-      [nonce, contractAddress, chainId, toBuffer(functionSignature)]
-    );
-  }
-
-  const getSignatureParameters = (signature) => {
-    if (!web3.utils.isHexStrict(signature)) {
-      throw new Error(
-        'Given value "'.concat(signature, '" is not a valid hex string.')
-      );
-    }
-    var r = signature.slice(0, 66);
-    var s = "0x".concat(signature.slice(66, 130));
-    var v = "0x".concat(signature.slice(130, 132));
-    v = web3.utils.hexToNumber(v);
-    if (![27, 28].includes(v)) v += 27;
-    return {
-      r: r,
-      s: s,
-      v: v,
-    };
-  };
 
   const handleClick = async () => {
 
-    const biconomy = new Biconomy(web3.currentProvider, { apiKey: "yyWjacp44.cb47adbb-4d70-496f-a9b2-b0caa7602f75", debug: true });
-    let biconomyWeb3 = new Web3(biconomy);
+    let functionSignature = biconomyContract.methods
+      .createLeaderboard(projectId, leaderboardName, epoch)
+      .encodeABI();
 
-    console.log(biconomyWeb3.currentProvider);
+    let nonce = await contract.methods.getNonce(window.ethereum.selectedAddress).call();
 
-    biconomy.onEvent(biconomy.READY, async () => {
-      // Initialize your dapp here like getting user accounts etc
+    let messageToSign = constructMetaTransactionMessage(
+      nonce,
+      137,
+      functionSignature,
+      "0xe21e026ff9b4ad82e10ea25d248ecc5a647925ad"
+    );
 
-      const deployedNetwork = CommunityLeaderboard.networks[137];
-      let biconomyContract = new biconomyWeb3.eth.Contract(
-        CommunityLeaderboard.abi,
-        deployedNetwork && deployedNetwork.address
-      );
-      biconomyContract.options.address = "0xe21e026ff9b4ad82e10ea25d248ecc5a647925ad";
+    console.log(messageToSign);
 
-      let functionSignature = biconomyContract.methods
-        .createLeaderboard(projectId, leaderboardName, epoch)
-        .encodeABI();
+    const signature = await web3.eth.personal.sign(
+      "0x" + messageToSign.toString("hex"), 
+      window.ethereum.selectedAddress
+    );
 
-      let nonce = await contract.methods.getNonce(window.ethereum.selectedAddress).call();
+    console.log("0x" + messageToSign.toString("hex"));
 
-      let messageToSign = constructMetaTransactionMessage(
-        nonce,
-        137,
-        functionSignature,
-        "0xe21e026ff9b4ad82e10ea25d248ecc5a647925ad"
-      );
+    let { r, s, v } = getSignatureParameters(web3, signature);
 
-      console.log(messageToSign);
+    let executeMetaTransactionData = biconomyContract.methods
+      .executeMetaTransaction(window.ethereum.selectedAddress, functionSignature, r, s, v)
+      .encodeABI();
 
-      const signature = await web3.eth.personal.sign(
-        "0x" + messageToSign.toString("hex"), 
-        window.ethereum.selectedAddress
-      );
+    let txParams = {
+      from: window.ethereum.selectedAddress,
+      to: "0xe21e026ff9b4ad82e10ea25d248ecc5a647925ad",
+      value: "0x0",
+      data: executeMetaTransactionData,
+    };
 
-      console.log("0x" + messageToSign.toString("hex"));
+    let tx = biconomyContract.methods.executeMetaTransaction(
+      window.ethereum.selectedAddress, 
+      functionSignature, r, s, v
+    )
+    .send({ from: window.ethereum.selectedAddress });
 
-      let { r, s, v } = getSignatureParameters(signature);
+    tx.on("transactionHash", (hash)=>{
+      // Handle transaction hash
+      console.log(hash);
+    }).once("confirmation", (confirmation, receipt) => {
+      // Handle confirmation  
+      setModalText("successful");
+      onOpen();
 
-      let executeMetaTransactionData = biconomyContract.methods
-        .executeMetaTransaction(window.ethereum.selectedAddress, functionSignature, r, s, v)
-        .encodeABI();
+      console.log(confirmation);
+      console.log(receipt);
+    }).on("error", error => {
+      // Handle error
+      setModalText("failed");
+      onOpen();
 
-      let gasPrice = await web3.eth.getGasPrice();
-      let gasPriceInteger = parseInt(gasPrice, 10);
-      let gasPriceFastInteger = Math.ceil(gasPriceInteger * 0.2 + gasPriceInteger);
-
-      let txParams = {
-        from: window.ethereum.selectedAddress,
-        to: "0xe21e026ff9b4ad82e10ea25d248ecc5a647925ad",
-        value: "0x0",
-        // gas: "200000",
-        // gasLimit: 3141592,
-        data: executeMetaTransactionData,
-      };
-
-      let tx = biconomyContract.methods.executeMetaTransaction(
-        window.ethereum.selectedAddress, 
-        functionSignature, r, s, v
-      )
-      .send({from: window.ethereum.selectedAddress /*, gas: 200000, gasLimit: 3141592, gasPrice: gasPriceFastInteger */ });
-  
-      tx.on("transactionHash", (hash)=>{
-        // Handle transaction hash
-      }).once("confirmation", (confirmation, recipet) => {
-        // Handle confirmation
-      }).on("error", error => {
-        // Handle error
-        console.log(error.message);
-      });
-
-    }).onEvent(biconomy.ERROR, (error, message) => {
-      // Handle error while initializing mexa
-      console.log(error);
-      console.log(message);
+      console.log(error.message);
     });
-
 
     // let gasPrice = await web3.eth.getGasPrice();
     // let gasPriceInteger = parseInt(gasPrice, 10);
@@ -194,6 +157,27 @@ const CreateLeaderboardNew = () => {
       >
         Create leaderboard
       </Button>
+
+      <Modal isOpen={isOpen} onClose={onClose}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Transaction {modalText}!</ModalHeader>
+          <ModalCloseButton />
+
+          <ModalFooter>
+            <Button 
+              bgGradient='linear(to-r, #B5E5FF, #C6C7FF, #E1A9F6, #F9ABE7)'
+              _hover={{
+                bgGradient: 'linear(to-r, #93D9FF, #9EA0FE, #DE86FF, #FE7BE0)'
+              }}
+              mr={3} 
+              onClick={onClose}
+            >
+              Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Flex>
    );
 }
